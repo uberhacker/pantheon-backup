@@ -3,15 +3,19 @@
 # Determine if the terminus command is available.
 TERMINUS=$(which terminus)
 if [ $? == 1 ]; then
-  echo "$(date +%Y-%m-%d$' '%H:%M:%S) Terminus is not installed."
+  echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Terminus is not installed.  See https://github.com/pantheon-systems/cli."
   exit
 fi
 
-# Attempt to login to Pantheon.
-$TERMINUS auth login 2> /dev/null
-if [ $? == 1 ]; then
-  echo "$(date +%Y-%m-%d$' '%H:%M:%S) Unable to login to Pantheon."
-  exit
+# Determine the login status.
+WHOAMI=$($TERMINUS auth whoami 2> /dev/null)
+if [ -z "$WHOAMI" ]; then
+  # Attempt to login to Pantheon.
+  $TERMINUS auth login 2> /dev/null
+  if [ $? == 1 ]; then
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Unable to login to Pantheon."
+    exit
+  fi
 fi
 
 # First argument is enviroment.
@@ -19,7 +23,7 @@ ENV="all"
 if test $1; then
   ENV=$1
   if [[ $ENV != "all" && $ENV != "dev" && $ENV != "test" && $ENV != "live" ]]; then
-    echo "$(date +%Y-%m-%d$' '%H:%M:%S) Invalid environment $ENV."
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Invalid environment $ENV."
     echo "Usage: $0 [dev|test|live|all] [code|database|files|all]"
     exit
   fi
@@ -30,7 +34,7 @@ ELEMENT="all"
 if test $2; then
   ELEMENT=$2
   if [[ $ELEMENT != "all" && $ELEMENT != "code" && $ELEMENT != "database" && $ELEMENT != "files" ]]; then
-    echo "$(date +%Y-%m-%d$' '%H:%M:%S) Invalid element $ELEMENT."
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Invalid element $ELEMENT."
     echo "Usage: $0 [dev|test|live|all] [code|database|files|all]"
     exit
   fi
@@ -38,20 +42,42 @@ fi
 
 # Retrieve all the available Pantheon sites.
 SITES=$($TERMINUS sites list 2> /dev/null | tail -n +2 | cut -d$'\t' -f1 | xargs)
-for SITE in $SITES; do
+for S in $SITES; do
   if [ $ENV == "all" ]; then
     # Determine all possible environments for the current site.
-    ENVS=$($TERMINUS site environments --site=$SITE 2> /dev/null | tail -n +2 | cut -d$'\t' -f1 | xargs)
+    ENVS=$($TERMINUS site environments --site=$S 2> /dev/null | tail -n +2 | cut -d$'\t' -f1 | xargs)
     # Loop through and backup each environment.
-    for ENV in $ENVS; do
-      echo "$(date +%Y-%m-%d$' '%H:%M:%S) Start backup for $ENV environment of $SITE site."
-      $TERMINUS site backups create --site=$SITE --env=$ENV --element=$ELEMENT 2> /dev/null
-      echo "$(date +%Y-%m-%d$' '%H:%M:%S) End backup for $ENV environment of $SITE site."
+    for E in $ENVS; do
+      # Determine the connection mode.
+      MODE=$($TERMINUS site environment-info --site=$S --env=$E --field=connection_mode 2> /dev/null | cut -d: -f2 | xargs)
+      if [ "$MODE" == "git" ]; then
+        echo "$(date +%Y-%m-%d$' '%H:%M:%S) Start backup for $E environment of $S site."
+        $TERMINUS site backups create --site=$S --env=$E --element=$ELEMENT 2> /dev/null
+        echo "$(date +%Y-%m-%d$' '%H:%M:%S) End backup for $E environment of $S site."
+      else
+        # Display errors if the connection mode is not git.
+        if [ "$MODE" == "sftp" ]; then
+          echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Backup skipped for $E environment of $S site because the connection mode is sftp."
+        else
+          echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Backup skipped for $E environment of $S because the environment has not been created."
+        fi
+      fi
     done
   else
-    # Backup for a specific environment.
-    echo "$(date +%Y-%m-%d$' '%H:%M:%S) Start backup for $ENV environment of $SITE site."
-    $TERMINUS site backups create --site=$SITE --env=$ENV --element=$ELEMENT 2> /dev/null
-    echo "$(date +%Y-%m-%d$' '%H:%M:%S) End backup for $ENV environment of $SITE site."
+    # Determine the connection mode.
+    MODE=$($TERMINUS site environment-info --site=$S --env=$ENV --field=connection_mode 2> /dev/null | cut -d: -f2 | xargs)
+    if [ "$MODE" == "git" ]; then
+      # Backup for a specific environment.
+      echo "$(date +%Y-%m-%d$' '%H:%M:%S) Start backup for $ENV environment of $S site."
+      $TERMINUS site backups create --site=$S --env=$ENV --element=$ELEMENT 2> /dev/null
+      echo "$(date +%Y-%m-%d$' '%H:%M:%S) End backup for $ENV environment of $S site."
+    else
+      # Display errors if the connection mode is not git.
+      if [ "$MODE" == "sftp" ]; then
+        echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Backup skipped for $ENV environment of $S site because the connection mode is sftp."
+      else
+        echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Backup skipped for $ENV environment of $S because the environment has not been created."
+      fi
+    fi
   fi
 done
