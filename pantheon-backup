@@ -1,0 +1,57 @@
+#!/bin/bash
+
+# Determine if the terminus command is available.
+TERMINUS=$(which terminus)
+if [ $? == 1 ]; then
+  echo "$(date +%Y-%m-%d$' '%H:%M:%S) Terminus is not installed."
+  exit
+fi
+
+# Attempt to login to Pantheon.
+$TERMINUS auth login 2> /dev/null
+if [ $? == 1 ]; then
+  echo "$(date +%Y-%m-%d$' '%H:%M:%S) Unable to login to Pantheon."
+  exit
+fi
+
+# First argument is enviroment.
+ENV="all"
+if test $1; then
+  ENV=$1
+  if [[ $ENV != "all" && $ENV != "dev" && $ENV != "test" && $ENV != "live" ]]; then
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) Invalid environment $ENV."
+    echo "Usage: $0 [dev|test|live|all] [code|database|files|all]"
+    exit
+  fi
+fi
+
+# Second argument is element.
+ELEMENT="all"
+if test $2; then
+  ELEMENT=$2
+  if [[ $ELEMENT != "all" && $ELEMENT != "code" && $ELEMENT != "database" && $ELEMENT != "files" ]]; then
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) Invalid element $ELEMENT."
+    echo "Usage: $0 [dev|test|live|all] [code|database|files|all]"
+    exit
+  fi
+fi
+
+# Retrieve all the available Pantheon sites.
+SITES=$($TERMINUS sites list 2> /dev/null | tail -n +2 | cut -d$'\t' -f1 | xargs)
+for SITE in $SITES; do
+  if [ $ENV == "all" ]; then
+    # Determine all possible environments for the current site.
+    ENVS=$($TERMINUS site environments --site=$SITE 2> /dev/null | tail -n +2 | cut -d$'\t' -f1 | xargs)
+    # Loop through and backup each environment.
+    for ENV in $ENVS; do
+      echo "$(date +%Y-%m-%d$' '%H:%M:%S) Start backup for $ENV environment of $SITE site."
+      $TERMINUS site backups create --site=$SITE --env=$ENV --element=$ELEMENT 2> /dev/null
+      echo "$(date +%Y-%m-%d$' '%H:%M:%S) End backup for $ENV environment of $SITE site."
+    done
+  else
+    # Backup for a specific environment.
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) Start backup for $ENV environment of $SITE site."
+    $TERMINUS site backups create --site=$SITE --env=$ENV --element=$ELEMENT 2> /dev/null
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) End backup for $ENV environment of $SITE site."
+  fi
+done
