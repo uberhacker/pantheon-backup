@@ -49,3 +49,12 @@
 # Backup all Pantheon sites daily at 3 AM.
 0 3 * * * /usr/local/bin/pantheon-backup 2>&1 >> /var/log/pantheon-backup.log
 ```
+
+###Troubleshooting:
+
+  If you get an error during backup similar to the following:
+  ```
+  [Error] Backup skipped for dev environment of my-pantheon-site because the environment has not been created.
+  ```
+  and you know the site has been created and set to git connection mode, try switching from git to sftp mode and then back to git mode.
+  Then try the backup again.
