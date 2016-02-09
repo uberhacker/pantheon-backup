@@ -18,27 +18,75 @@ if [ -z "$WHOAMI" ]; then
   fi
 fi
 
-# First argument is enviroment.
+# First argument is the enviroment.
 ENV="all"
 if test $1; then
   ENV=$1
   if [[ $ENV != "all" && $ENV != "dev" && $ENV != "test" && $ENV != "live" ]]; then
-    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Invalid environment $ENV."
-    echo "Usage: $0 [dev|test|live|all] [code|database|files|all]"
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Invalid environment argument: $ENV."
+    echo "Usage: $0 [dev|test|live|all] [code|database|files|all] [commit|skip|ignore]"
     exit
   fi
 fi
 
-# Second argument is element.
+# Second argument is the element.
 ELEMENT="all"
 if test $2; then
   ELEMENT=$2
   if [[ $ELEMENT != "all" && $ELEMENT != "code" && $ELEMENT != "database" && $ELEMENT != "files" ]]; then
-    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Invalid element $ELEMENT."
-    echo "Usage: $0 [dev|test|live|all] [code|database|files|all]"
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Invalid element argument: $ELEMENT."
+    echo "Usage: $0 [dev|test|live|all] [code|database|files|all] [commit|skip|ignore]"
     exit
   fi
 fi
+
+# Third argument decides how to handle pending filesystem changes when in sftp connection mode.
+PENDING="commit"
+if test $3; then
+  PENDING=$3
+  if [[ $PENDING != "commit" && $PENDING != "skip" && $PENDING != "ignore" ]]; then
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Invalid pending argument: $PENDING"
+    echo "Usage: $0 [dev|test|live|all] [code|database|files|all] [commit|skip|ignore]"
+    exit
+  fi
+fi
+
+# Function to perform the backup of a specific site and environment.
+function backup(){
+  # Assume a backup unless determined otherwise.
+  BACKUP="y"
+  # Determine the connection mode.
+  MODE=$($TERMINUS site environment-info --site=$1 --env=$2 --field=connection_mode 2> /dev/null | cut -d: -f2 | xargs)
+  # Skip backup if there is no connection mode.
+  if [ "$MODE" == "" ]; then
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Warning] Backup skipped for $ELEMENT elements in $2 environment of $1 site because the environment has not been created."
+    BACKUP="n"
+  fi
+  # Only applies to sftp connection mode.
+  if [ "$MODE" == "sftp" ]; then
+    # Only applies to code or all elements.
+    if [[ "$ELEMENT" == "code" || "$ELEMENT" == "all" ]]; then
+      # Determine if there are any pending filesystem changes.
+      DIFF=$($TERMINUS site code diffstat --site=$1 --env=$2 2> /dev/null)
+      if [ ! -z "$DIFF" ]; then
+        if [ "$PENDING" == "commit" ]; then
+          echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Notice] Start automatic backup commit for $2 environment of $1 site."
+          $TERMINUS site code commit --site=$1 --env=$2 --message="Automatic backup commit with the following changes: $DIFF" 2> /dev/null
+          echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Notice] End automatic backup commit for $2 environment of $1 site."
+        fi
+        if [ "$PENDING" == "skip" ]; then
+          echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Warning] Backup skipped for $ELEMENT elements in $2 environment of $1 site because there are pending filesystem changes."
+          BACKUP="n"
+        fi
+      fi
+    fi
+  fi
+  if [ "$BACKUP" == "y" ]; then
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Notice] Start backup for $ELEMENT elements in $2 environment of $1 site."
+    $TERMINUS site backups create --site=$1 --env=$2 --element=$ELEMENT 2> /dev/null
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Notice] End backup for $ELEMENT elements in $2 environment of $1 site."
+  fi
+}
 
 # Retrieve all the available Pantheon sites.
 SITES=$($TERMINUS sites list 2> /dev/null | tail -n +2 | cut -d$'\t' -f1 | xargs)
@@ -48,36 +96,9 @@ for S in $SITES; do
     ENVS=$($TERMINUS site environments --site=$S 2> /dev/null | tail -n +2 | cut -d$'\t' -f1 | xargs)
     # Loop through and backup each environment.
     for E in $ENVS; do
-      # Determine the connection mode.
-      MODE=$($TERMINUS site environment-info --site=$S --env=$E --field=connection_mode 2> /dev/null | cut -d: -f2 | xargs)
-      if [ "$MODE" == "git" ]; then
-        echo "$(date +%Y-%m-%d$' '%H:%M:%S) Start backup for $E environment of $S site."
-        $TERMINUS site backups create --site=$S --env=$E --element=$ELEMENT 2> /dev/null
-        echo "$(date +%Y-%m-%d$' '%H:%M:%S) End backup for $E environment of $S site."
-      else
-        # Display errors if the connection mode is not git.
-        if [ "$MODE" == "sftp" ]; then
-          echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Backup skipped for $E environment of $S site because the connection mode is sftp."
-        else
-          echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Backup skipped for $E environment of $S because the environment has not been created."
-        fi
-      fi
+      backup $S $E
     done
   else
-    # Determine the connection mode.
-    MODE=$($TERMINUS site environment-info --site=$S --env=$ENV --field=connection_mode 2> /dev/null | cut -d: -f2 | xargs)
-    if [ "$MODE" == "git" ]; then
-      # Backup for a specific environment.
-      echo "$(date +%Y-%m-%d$' '%H:%M:%S) Start backup for $ENV environment of $S site."
-      $TERMINUS site backups create --site=$S --env=$ENV --element=$ELEMENT 2> /dev/null
-      echo "$(date +%Y-%m-%d$' '%H:%M:%S) End backup for $ENV environment of $S site."
-    else
-      # Display errors if the connection mode is not git.
-      if [ "$MODE" == "sftp" ]; then
-        echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Backup skipped for $ENV environment of $S site because the connection mode is sftp."
-      else
-        echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Backup skipped for $ENV environment of $S because the environment has not been created."
-      fi
-    fi
+    backup $S $ENV
   fi
 done
