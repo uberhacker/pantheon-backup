@@ -15,12 +15,38 @@
 ###Usage:
 
 ```
-  $ pantheon-backup [dev|test|live|all] [code|database|files|all]
+  $ pantheon-backup [dev|test|live|all] [code|database|files|all] [commit|skip|ignore]
 ```
 
-  *The first argument is the environment and defaults to all.*
+  The first argument is the environment and defaults to all.
 
-  *The second argument is the element and defaults to all.*
+  *dev - Development environment*
+
+  *test - Staging environment*
+
+  *live - Production environment*
+
+  *all - All environments including any multi-site environments*
+
+  The second argument is the element and defaults to all.
+
+  *code - Code element (files inside the git repository)*
+
+  *database - Database element (MariaDB dump)*
+
+  *files - Files element (files outside the git repository)*
+
+  *all - Code, database and files elements*
+
+  The third argument decides how to handle pending filesystem changes and defaults to commit.
+
+  *This argument is only necessary when the environment is in sftp connection mode.*
+
+  *commit - Commit pending filesystem changes before performing the backup*
+
+  *skip - Skip the backup entirely if filesystem changes are pending*
+
+  *ignore - Perform the backup without committing pending filesystem changes*
 
 ###Examples:
   *pantheon-backup*
