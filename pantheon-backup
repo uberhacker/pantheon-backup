@@ -3,7 +3,7 @@
 # Determine if the terminus command is available.
 TERMINUS=$(which terminus)
 if [ $? == 1 ]; then
-  echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Terminus is not installed.  See https://github.com/pantheon-systems/cli."
+  echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Terminus is not installed.  See https://github.com/pantheon-systems/terminus."
   exit
 fi
 
@@ -18,7 +18,7 @@ if [ -z "$WHOAMI" ]; then
   fi
 fi
 
-# First argument is the enviroment.
+# First argument is the environment.
 ENV="all"
 if test $1; then
   ENV=$1
@@ -81,6 +81,7 @@ function backup(){
       fi
     fi
   fi
+  # Create the backup.
   if [ "$BACKUP" == "y" ]; then
     echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Notice] Start backup for $ELEMENT elements in $2 environment of $1 site."
     $TERMINUS site backups create --site=$1 --env=$2 --element=$ELEMENT 2> /dev/null
@@ -99,6 +100,7 @@ for S in $SITES; do
       backup $S $E
     done
   else
+    # Perform the backup of a specific environment.
     backup $S $ENV
   fi
 done
