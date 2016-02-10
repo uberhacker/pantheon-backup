@@ -23,9 +23,17 @@ ENV="all"
 if test $1; then
   ENV=$1
   if [[ $ENV != "all" && $ENV != "dev" && $ENV != "test" && $ENV != "live" ]]; then
-    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Invalid environment argument: $ENV."
-    echo "Usage: $0 [dev|test|live|all] [code|database|files|all] [commit|skip|ignore]"
-    exit
+    $TERMINUS sites list 2> /dev/null
+    echo -n "Is this a multi-site environment?  Enter the site for this environment: "; read S
+    if [ -z "$S" ]; then
+      exit
+    fi
+    ID=$($TERMINUS site environment-info --site=$S --env=$ENV --field=id 2> /dev/null)
+    if [ -z "$ID" ]; then
+      echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Error] Invalid environment argument: $ENV."
+      echo "Usage: $0 [dev|test|live|all] [code|database|files|all] [commit|skip|ignore]"
+      exit
+    fi
   fi
 fi
 
@@ -59,7 +67,7 @@ function backup(){
   MODE=$($TERMINUS site environment-info --site=$1 --env=$2 --field=connection_mode 2> /dev/null | cut -d: -f2 | xargs)
   # Skip backup if there is no connection mode.
   if [ "$MODE" == "" ]; then
-    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Warning] Backup skipped for $ELEMENT elements in $2 environment of $1 site because the environment has not been created."
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Warning] Backup skipped for $ELEMENT in $2 environment of $1 site because the environment has not been created."
     BACKUP="n"
   fi
   # Only applies to sftp connection mode.
@@ -75,7 +83,7 @@ function backup(){
           echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Notice] End automatic backup commit for $2 environment of $1 site."
         fi
         if [ "$PENDING" == "skip" ]; then
-          echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Warning] Backup skipped for $ELEMENT elements in $2 environment of $1 site because there are pending filesystem changes."
+          echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Warning] Backup skipped for $ELEMENT in $2 environment of $1 site because there are pending filesystem changes."
           BACKUP="n"
         fi
       fi
@@ -83,9 +91,9 @@ function backup(){
   fi
   # Create the backup.
   if [ "$BACKUP" == "y" ]; then
-    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Notice] Start backup for $ELEMENT elements in $2 environment of $1 site."
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Notice] Start backup for $ELEMENT in $2 environment of $1 site."
     $TERMINUS site backups create --site=$1 --env=$2 --element=$ELEMENT 2> /dev/null
-    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Notice] End backup for $ELEMENT elements in $2 environment of $1 site."
+    echo "$(date +%Y-%m-%d$' '%H:%M:%S) [Notice] End backup for $ELEMENT in $2 environment of $1 site."
   fi
 }
 
