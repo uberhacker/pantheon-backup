@@ -75,6 +75,11 @@
 
     Backup all elements of the live environment only for all available sites
 
+  *pantheon-backup dev code ignore*
+
+    Backup the code only of the dev environment only for all available sites
+    and perform the backup without committing pending filesystem changes
+
 ###Example crontab entry:
 
 ```
@@ -86,7 +91,7 @@
 
   If you get an error during backup similar to the following:
   ```
-  [Error] Backup skipped for dev environment of my-pantheon-site because the environment has not been created.
+  ... [Error] Backup skipped for XXX elements in YYY environment of ZZZ site because the environment has not been created.
   ```
   and you know the site has been created and set to git connection mode, try switching from git to sftp mode and then back to git mode.
   Then try the backup again.
